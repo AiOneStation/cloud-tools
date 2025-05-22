@@ -1,0 +1,1 @@
+nova list --fields tenant_id,flavor:vcpus,flavor:ram,networks,os-extended-volumes:volumes_attached

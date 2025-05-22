@@ -1,0 +1,148 @@
+#!/usr/bin/python
+
+import boto
+import boto.s3.connection
+from boto.s3.lifecycle import Lifecycle, Transition, Expiration, Rule
+import argparse
+import datetime
+import timeit
+import sys
+import os
+
+POLICY_FMT = '''
+{
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::%s/*"
+    }
+  ]
+}
+'''
+
+parser = argparse.ArgumentParser(sys.argv[0])
+parser.add_argument("command")
+parser.add_argument("--host")
+parser.add_argument("--port")
+parser.add_argument("--bucket", "-b")
+parser.add_argument("--access-key", "-a")
+parser.add_argument("--secret-key", "-s")
+parser.add_argument("--count", "-c", type=int, default=10000)
+parser.add_argument("--prefix", "-i", default="")
+
+args = parser.parse_args()
+
+host = args.host or os.environ.get('AWS_HOST')
+port = args.port or os.environ.get('AWS_PORT')
+access_key = args.access_key or os.environ.get('AWS_ACCESS_KEY_ID')
+secret_key = args.secret_key or os.environ.get('AWS_SECRET_ACCESS_KEY')
+if (access_key == None) or (secret_key == None):
+    print("AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY not found")
+    exit(-1)
+
+conn = boto.connect_s3(
+    aws_access_key_id = access_key,
+    aws_secret_access_key = secret_key,
+    host = host,
+    port = int(port),
+    is_secure = False,
+    #calling_format = boto.s3.connection.OrdinaryCallingFormat(),
+    )
+
+def time():
+    bucket = conn.get_bucket(args.bucket)
+    count = 0
+    for key in bucket.list():
+        count += 1
+        if count >= args.count:
+            break
+    print("count = %d" % count)
+
+def list():
+    count = 0;
+    if args.bucket == None:
+        for bucket in conn.get_all_buckets():
+            print "bucket:{name}\tdate:{created}".format(name = bucket.name, created = bucket.creation_date)
+            count += 1
+    else:
+        bucket = conn.get_bucket(args.bucket)
+        for key in bucket.list():
+            print(key.name)
+            count += 1
+    print("count = %d" % count)
+
+def get():
+    bucket = conn.get_bucket(args.bucket)
+    count = 0
+    for key in bucket.list():
+        count += 1
+        print(key.name)
+        if count >= args.count:
+            break
+    print("count = %d" % count)
+
+def put():
+    bucket = conn.get_bucket(args.bucket)
+    for i in range(args.count):
+        start = timeit.default_timer()
+        name = "%s/%d.html" % (args.prefix, i)
+        key = bucket.new_key(name)
+        key.content_type = 'text/html'
+        key.set_contents_from_string('<h1>Hello World!</h1>')
+        key.set_acl('public-read')
+        stop = timeit.default_timer()
+        print("put object '%s' (%0.3fs)" % (name, stop - start))
+    print("count = %d" % args.count)
+
+def expire():
+    bucket = conn.get_bucket(args.bucket)
+    lifecycle = Lifecycle()
+    lifecycle.add_rule(expiration=1)
+    bucket.configure_lifecycle(lifecycle)
+    rules = bucket.get_lifecycle_config()
+    print("expiration.days = %d" % rules[0].expiration.days)
+    print("rule.status = %s" % rules[0].status)
+
+def allow():
+    policy = POLICY_FMT % args.bucket
+    bucket = conn.get_bucket(args.bucket)
+    bucket.set_policy(policy)
+
+def init():
+    for i in range(366):
+        name = "zxy-sub%03d" % i
+        policy = POLICY_FMT % name
+        print(policy)
+
+        bucket = conn.create_bucket(name)
+        bucket.set_policy(policy)
+
+        lifecycle = Lifecycle()
+        lifecycle.add_rule(expiration = 365)
+        bucket.configure_lifecycle(lifecycle)
+
+        rules = bucket.get_lifecycle_config()
+        print("expiration.days = %d" % rules[0].expiration.days)
+        print("rule.status = %s" % rules[0].status)
+
+def rm():
+    for i in range(1024):
+        name = "zxy-%04d" % i
+        print("removing ", name)
+        conn.delete_bucket(name)
+
+def main():
+    print(">>> doing %s()" % args.command)
+    t = timeit.timeit(
+        args.command + '()',
+        setup="from __main__ import %s" % args.command,
+        number=1
+        )
+    print("timeit = %0.3fs" % t)
+    print("<<<")
+
+if __name__ == "__main__":
+    main()
+

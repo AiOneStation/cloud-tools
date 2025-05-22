@@ -1,0 +1,13 @@
+---
+- hosts: k8snode
+  become: true
+  gather_facts: true
+  tasks:
+    - name: change host setting
+      script: ../bin/delete-k8s.sh
+
+    - name: 删除kube-vip的IP配置信息
+      shell: "ip addr del {{ kubernetes_vip }}/32 dev lo"
+      when:
+        - inventory_hostname in groups['k8smaster']
+        - groups['k8smaster'] | length >= 3

@@ -1,0 +1,1 @@
+openstack server list --all-projects -c Name -c Project_ID -c "Availability Zone" -c Flavor > da4.csv

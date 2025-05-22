@@ -1,0 +1,4 @@
+#!/bin/bash
+./foreach "$@" -b -a "bash -c 'docker stop \$(docker ps -aq)'"
+./foreach "$@" -b -a "bash -c 'docker start \$(docker ps -aq)'"
+

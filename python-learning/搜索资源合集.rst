@@ -1,0 +1,54 @@
+搜索相关资源
+============
+
+编程思想训练
+------------
+ - Scratch https://scratch.mit.edu/
+ - https://code.org/
+
+
+搜索引擎
+--------
+ - https://cn.bing.com/  微软出的，国内能用。搜索要限定范围，加范围限定词，避免同义词干扰。
+ - https://www.douban.com/  搜索电影、影评、书
+
+
+搜索引擎 - 面向开发人员的
+-------------------------
+ - https://kaifa.baidu.com  开发者搜索
+ - https://tooool.org/  程序员导航
+ - https://stackoverflow.com  世界最大的程序员交流网站
+ - https://www.google.com/?hl=xx-hacker  谷歌出品、面向黑客的搜索引擎；国内打不开；
+ - `程序员最佳资料汇总 <https://github.com/sdmg15/Best-websites-a-programmer-should-visit>`_
+
+
+IP 地址查询
+-----------
+https://www.ip138.com/  历史久，数据比较全；
+
+
+海底光缆地图
+------------
+国际海底光缆：
+
+ - 新版海缆图，还在开发中： https://dev.networkatlas.org/
+ - 旧版： https://cablemap.info/_default.aspx
+
+
+公共数据源
+----------
+
+ - 国家统计局
+ - 中国互联网络信息中心
+ - 中国互联网数据资讯中心
+ - 中国信通院
+ - 艾瑞网
+ - 前瞻网
+ - 极光大数据
+ - 易观智库
+ - 数据报告-移动观象台-TalkingData
+ - 艾媒网, 全球领先的新经济行业数据分析报告发布平台
+ - 七麦数据（原ASO100）-专业移动产品商业分析平台-ASO-ASM优化
+ - 企鹅智酷_腾讯网
+ - 腾讯大数据
+ - IT桔子 | 泛互联网创业投资项目信息数据库及商业信息服务商

@@ -1,0 +1,10 @@
+获取主机名称
+/host="(.*?)"/
+
+获取项目：
+
+label_values(libvirt_domain_info_virtual_cpus,project_name)
+
+获取项目下面所有的物理机:
+query_result(label_replace(libvirt_domain_info_virtual_cpus{project_name=~"$project"}, "host", "$1$2:9100", "host", "([^.]*)|(.*).maas"))
+query_result(label_replace(libvirt_domain_info_virtual_cpus{project_name=~"$project"}, "host", "$1$2:9100", "host", "([^.]*)|(.*).maas"))

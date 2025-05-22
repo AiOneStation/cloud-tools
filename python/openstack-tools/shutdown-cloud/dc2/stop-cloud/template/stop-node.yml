@@ -1,0 +1,17 @@
+- hosts: compute
+  become: true
+  gather_facts: true
+  vars:
+    running_numbers: 0
+  tasks:
+    - name: 关闭所有node节点
+      shell: "docker stop $(docker ps -a -q)"
+
+    - name: 判断容器是否全部关闭
+      shell: "docker ps -f 'status=running' -q "
+      register: runs
+      until: runs.stdout_lines|length == {{ running_numbers }}
+      retries: 6
+      delay: 10
+
+

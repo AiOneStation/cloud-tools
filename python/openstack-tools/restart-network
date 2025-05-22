@@ -1,0 +1,4 @@
+#!/bin/bash
+./foreach "$@" network -b -a "docker restart keepalived haproxy"
+./foreach "$@" control -b -a "docker restart rabbitmq neutron_server"
+

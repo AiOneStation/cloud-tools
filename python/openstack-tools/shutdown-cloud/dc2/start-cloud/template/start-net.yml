@@ -1,0 +1,55 @@
+---
+- hosts: compute
+  become: true
+  gather_facts: true
+  vars:
+    running_numbers: 10
+  tasks:
+    - name: 先启动network节点1
+      shell: "docker start $(docker ps -a -q)"
+      when:
+        - inventory_hostname == "dc2-net04"
+
+    - name: 判断容器是否启动成功，容器启动数量要大于定义数值
+      shell: "docker ps -f 'status=running' -q"
+      register: runs
+      until: runs.stdout_lines|length >= {{ running_numbers }}
+      retries: 6
+      delay: 10
+      when:
+        - inventory_hostname == "dc2-net04"
+
+
+    - name: 再启动net节点2
+      shell: "docker start $(docker ps -a -q)"
+      when:
+        - inventory_hostname == "dc2-net05"
+
+    - name: 判断容器是否启动成功，容器启动数量要大于一定数值
+      shell: "docker ps -f 'status=running' -q "
+      register: runs
+      until: runs.stdout_lines|length >= {{ running_numbers }}
+      retries: 6
+      delay: 10
+      when:
+        - inventory_hostname == "dc2-net05"
+
+
+    - name: 再启动net节点3
+      shell: "docker start $(docker ps -a -q)"
+      when:
+        - inventory_hostname == "dc2-net06"
+
+    - name: 判断容器是否启动成功，容器启动数量要大于一定数值
+      shell: "docker ps -f 'status=running' -q "
+      register: runs
+      until: runs.stdout_lines|length >= {{ running_numbers }}
+      retries: 6
+      delay: 10
+      when:
+        - inventory_hostname == "dc2-net06"
+
+
+
+
+

@@ -1,0 +1,56 @@
+---
+
+- hosts: control
+  become: true
+  gather_facts: true
+  vars:
+    running_numbers: 0
+  tasks:
+    - name: 先关闭control节点3
+      shell: "docker stop $(docker ps -a -q)"
+      when:
+        - inventory_hostname == groups['control'][2]
+
+    - name: 判断容器是否启动成功，容器启动数量要大于定义数值
+      shell: "docker ps -f 'status=running' -q "
+      register: runs
+      until: runs.stdout_lines|length == {{ running_numbers }}
+      retries: 6
+      delay: 10
+      when:
+        - inventory_hostname == groups['control'][2]
+
+
+    - name: 再关闭control节点2
+      shell: "docker stop $(docker ps -a -q)"
+      when:
+        - inventory_hostname == groups['control'][1]
+
+    - name: 判断容器是否启动成功，容器启动数量要大于一定数值
+      shell: "docker ps -f 'status=running' -q "
+      register: runs
+      until: runs.stdout_lines|length == {{ running_numbers }}
+      retries: 6
+      delay: 10
+      when:
+        - inventory_hostname == groups['control'][1]
+
+
+    - name: 最后关闭control节点0
+      shell: "docker stop $(docker ps -a -q)"
+      when:
+        - inventory_hostname == groups['control'][0]
+
+    - name: 判断容器是否关闭成功，容器启动数量要等于一定数值
+      shell: "docker ps -f 'status=running' -q "
+      register: runs
+      until: runs.stdout_lines|length == {{ running_numbers }}
+      retries: 6
+      delay: 10
+      when:
+        - inventory_hostname == groups['control'][0]
+
+
+
+
+

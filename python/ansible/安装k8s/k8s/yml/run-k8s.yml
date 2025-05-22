@@ -1,0 +1,167 @@
+---
+- hosts: k8snode
+  become: true
+  gather_facts: true
+  vars:
+    interface_name: "bond0"
+  tasks:
+    - name: 设置非bond模式使用的网卡
+      set_fact: interface_name="{{ bond0 }}"
+      when: bond_mode == 'none'
+
+    - name: 设置ip地址
+      set_fact: node_ipaddress="{{ lookup('vars', 'ansible_'+interface_name).ipv4.address }}"
+
+    - name: 修改系统参数
+      shell: |
+        apt-get install -y ipset ipvsadm apt-transport-https ca-certificates chrony jq
+
+        sudo tee /etc/modules-load.d/kubernetes.conf <<EOF
+        br_netfilter
+        ip_vs
+        ip_vs_rr
+        ip_vs_wrr
+        ip_vs_sh
+        overlay
+        nf_conntrack
+        EOF
+
+        # 加载内核模块，不用重启也能生效
+        modprobe br_netfilter
+        modprobe ip_vs
+        modprobe ip_vs_rr
+        modprobe ip_vs_wrr
+        modprobe ip_vs_sh
+        modprobe overlay
+        modprobe nf_conntrack
+        swapoff -a
+        sed -i '/swap/ s/^\(.*\)$/#\1/g' /etc/fstab
+      args:
+        executable: /bin/bash
+
+
+    - name: install containerd
+      shell: |
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+        add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+        apt update && apt install -y containerd.io=1.6.10-1
+        mkdir -p /etc/containerd/ && containerd config default > /etc/containerd/config.toml
+        sed -i "s#registry.k8s.io/pause#registry.aliyuncs.com/google_containers/pause#g" /etc/containerd/config.toml && sed -i 's#SystemdCgroup = false#SystemdCgroup = true#g' /etc/containerd/config.toml && sed -i '/registry.mirrors]/a\ \ \ \ \ \ \ \ [plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]' /etc/containerd/config.toml && sed -i '/registry.mirrors."docker.io"]/a\ \ \ \ \ \ \ \ \ \ endpoint = ["https://docker.fzyun.io"]' /etc/containerd/config.toml
+        systemctl daemon-reload
+        systemctl enable containerd
+        systemctl restart containerd
+      args:
+        executable: /bin/bash
+
+    - name: install kubernetes
+      shell: |
+        curl https://mirrors.aliyun.com/kubernetes/apt/doc/apt-key.gpg --insecure| sudo apt-key add -
+        echo 'deb https://mirrors.aliyun.com/kubernetes/apt/ kubernetes-xenial main' > /etc/apt/sources.list.d/kubernetes.list
+        apt update
+        apt install -y kubeadm=1.24.8-00 kubectl=1.24.8-00 kubelet=1.24.8-00
+        crictl config runtime-endpoint unix:///run/containerd/containerd.sock
+        crictl config image-endpoint unix:///run/containerd/containerd.sock
+        crictl config timeout 10
+        systemctl daemon-reload
+        sudo systemctl enable kubelet
+        sudo systemctl restart kubelet
+      args:
+        executable: /bin/bash
+
+    - name: 拉取kube-vip镜像
+      shell: "ctr image pull ghcr.io/kube-vip/kube-vip:v0.5.6"
+      when:
+        - inventory_hostname in groups['k8smaster']
+        - groups['k8smaster']| length >= 3
+
+    - name: 创建Kube-vip的静态pod
+      shell: |
+        install -d /etc/kubernetes/manifests/
+        alias kube-vip="ctr run --rm --net-host ghcr.io/kube-vip/kube-vip:v0.5.6 vip /kube-vip"
+        kube-vip manifest pod \
+            --interface lo \
+            --vip {{ kubernetes_vip }} \
+            --controlplane \
+            --services \
+            --bgp \
+            --localAS 64512 \
+            --bgpRouterID {{ node_ipaddress }} \
+            --bgppeers {{ item }} | tee /etc/kubernetes/manifests/kube-vip.yaml
+      loop:
+        - "{{ hostvars[groups['k8smaster'][1]].node_ipaddress }}:64512::false,{{ hostvars[groups['k8smaster'][2]].node_ipaddress }}:64512::false"
+      loop_control:
+          index_var: peers_idx
+      when:
+        - groups['k8smaster'] | length >= 3
+        - inventory_hostname == groups['k8smaster']|first
+        - groups['k8smaster'].index(inventory_hostname) == peers_idx
+
+    - name: 初始化k8s第一个节点
+      shell: "kubeadm init --image-repository=registry.aliyuncs.com/google_containers --kubernetes-version=v1.24.8 --apiserver-advertise-address={{ hostvars[groups['k8smaster'][0]].node_ipaddress }} --control-plane-endpoint={{ kubernetes_vip }}:6443 --upload-certs | grep certificate-key|grep control-plane | awk '{print $3}'"
+      register: joincerts
+      ignore_errors: no
+      when:
+        - inventory_hostname == groups['k8smaster']|first
+
+
+    - name: 拉取admin.conf到本地部署节点
+      fetch: src=/etc/kubernetes/admin.conf dest=/root/.kube/config flat=yes
+      when:
+        - inventory_hostname == groups['k8smaster']|first
+
+
+    - name: 获得加入集群node命令
+      command: "kubeadm token create --print-join-command"
+      register: joincommand
+      when:
+        - inventory_hostname == groups['k8smaster']|first
+
+    - name: 打印集群证书
+      debug: var=joincerts.stdout verbosity=0
+      when:
+        - inventory_hostname == groups['k8smaster']|first
+
+
+    - name: worker节点加入k8s集群
+      command: "{{ hostvars[groups['k8smaster'][0]]['joincommand'].stdout }}"
+      args:
+        executable: /bin/bash
+      when:
+        - inventory_hostname in groups['k8sworker']
+
+    - name: 其余master节点加入k8s集群
+      command: "{{ hostvars[groups['k8smaster'][0]]['joincommand'].stdout }} --control-plane --certificate-key {{ hostvars[groups['k8smaster'][0]]['joincerts'].stdout }} --v=6"
+      args:
+        executable: /bin/bash
+      when:
+        - groups['k8smaster'] | length >= 3
+        - inventory_hostname in groups['k8smaster']
+        - inventory_hostname != groups['k8smaster']|first
+      register: log_result
+      ignore_errors: yes
+
+    - name: 为其余master创建Kube-vip的静态pod
+      shell: |
+        install -d /etc/kubernetes/manifests/
+        alias kube-vip="ctr run --rm --net-host ghcr.io/kube-vip/kube-vip:v0.5.6 vip /kube-vip"
+        kube-vip manifest pod \
+            --interface lo \
+            --vip {{ kubernetes_vip }} \
+            --controlplane \
+            --services \
+            --bgp \
+            --localAS 64512 \
+            --bgpRouterID {{ node_ipaddress }} \
+            --bgppeers {{ item }} | tee /etc/kubernetes/manifests/kube-vip.yaml
+      loop:
+        - "{{ hostvars[groups['k8smaster'][1]].node_ipaddress }}:64512::false,{{ hostvars[groups['k8smaster'][2]].node_ipaddress }}:64512::false"
+        - "{{ hostvars[groups['k8smaster'][0]].node_ipaddress }}:64512::false,{{ hostvars[groups['k8smaster'][2]].node_ipaddress }}:64512::false"
+        - "{{ hostvars[groups['k8smaster'][0]].node_ipaddress }}:64512::false,{{ hostvars[groups['k8smaster'][1]].node_ipaddress }}:64512::false"
+      loop_control:
+          index_var: peers_idx
+      when:
+        - groups['k8smaster'] | length >= 3
+        - inventory_hostname in groups['k8smaster']
+        - inventory_hostname != groups['k8smaster']|first
+        - groups['k8smaster'].index(inventory_hostname) == peers_idx
+

@@ -1,0 +1,1 @@
+kubectl delete pod calico-kube-controllers-6766647d54-68xgv --grace-period=0 --force --namespace kube-system

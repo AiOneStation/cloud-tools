@@ -1,0 +1,15 @@
+- hosts: compute
+  become: true
+  gather_facts: true
+  vars:
+    running_numbers: 3
+  tasks:
+    - name: 启动所有node节点的容器
+      shell: "docker start $(docker ps -a -q)"
+
+    - name: 判断容器是否启动成功
+      shell: "docker ps -f 'status=running' -q "
+      register: runs
+      until: runs.stdout_lines|length >= {{ running_numbers }}
+      retries: 6
+      delay: 10

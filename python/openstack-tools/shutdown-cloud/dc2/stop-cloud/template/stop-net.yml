@@ -1,0 +1,55 @@
+---
+- hosts: compute
+  become: true
+  gather_facts: true
+  vars:
+    running_numbers: 0
+  tasks:
+    - name: 先关闭network节点3
+      shell: "docker stop $(docker ps -a -q)"
+      when:
+        - inventory_hostname == "dc2-net06"
+
+    - name: 判断容器是否showdown成功，容器启动数量要等于零
+      shell: "docker ps -f 'status=running' -q "
+      register: runs
+      until: runs.stdout_lines|length == {{ running_numbers }}
+      retries: 6
+      delay: 10
+      when:
+        - inventory_hostname == "dc2-net06"
+
+
+    - name: 再关闭network节点2
+      shell: "docker stop $(docker ps -a -q)"
+      when:
+        - inventory_hostname == "dc2-net05"
+
+    - name: 判断容器是否启动成功，容器启动数量要等于零
+      shell: "docker ps -f 'status=running' -q "
+      register: runs
+      until: runs.stdout_lines|length == {{ running_numbers }}
+      retries: 6
+      delay: 10
+      when:
+        - inventory_hostname == "dc2-net05"
+
+
+    - name: 再启动network节点3
+      shell: "docker stop $(docker ps -a -q)"
+      when:
+        - inventory_hostname == "dc2-net04"
+
+    - name: 判断容器是否关闭成功，容器启动数量要等于0
+      shell: "docker ps -f 'status=running' -q "
+      register: runs
+      until: runs.stdout_lines|length == {{ running_numbers }}
+      retries: 6
+      delay: 10
+      when:
+        - inventory_hostname == "dc2-net04"
+
+
+
+
+
